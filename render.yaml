@@ -6,7 +6,7 @@ services:
     branch: praktik-payload-next
     plan: free
     region: frankfurt
-    buildCommand: npm install --no-audit --no-fund && npm run build
+    buildCommand: npm install --no-audit --no-fund && npm run db:init:preview && npm run build
     startCommand: npm run start
     healthCheckPath: /health
     autoDeploy: true
