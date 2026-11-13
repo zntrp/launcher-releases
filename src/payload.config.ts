@@ -5,6 +5,7 @@ import { postgresAdapter } from '@payloadcms/db-postgres'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import { s3Storage } from '@payloadcms/storage-s3'
 import sharp from 'sharp'
+import {seedPreview} from './lib/seed'
 import { Users } from './collections/Users'
 import { Media } from './collections/Media'
 import { Products } from './collections/Products'
@@ -30,7 +31,7 @@ const plugins=s3Ready?[s3Storage({
 
 export default buildConfig({
   secret:process.env.PAYLOAD_SECRET||'',
-  serverURL:process.env.NEXT_PUBLIC_SERVER_URL||'http://localhost:3000',
+  serverURL:process.env.NEXT_PUBLIC_SERVER_URL||(process.env.RENDER_EXTERNAL_HOSTNAME?'https://'+process.env.RENDER_EXTERNAL_HOSTNAME:'http://localhost:3000'),
   admin:{
     user:Users.slug,
     meta:{titleSuffix:' — Практик Пласт'},
@@ -55,5 +56,8 @@ export default buildConfig({
   globals:[SiteSettings],
   plugins,
   sharp,
+  onInit: async (payload) => {
+    if(process.env.PREVIEW_AUTO_SEED==='true') await seedPreview(payload)
+  },
   typescript:{outputFile:path.resolve(dirname,'payload-types.ts')},
 })
