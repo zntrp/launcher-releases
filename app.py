@@ -165,6 +165,16 @@ def render(route):
    if not isinstance(url,str) or not IMAGE_PATH.fullmatch(url):continue
    pattern=r'(<img\b[^>]*?src=")[^"]+("[^>]*?alt="'+re.escape(alt)+'")'
    original=re.sub(pattern,lambda m:m.group(1)+esc(url)+m.group(2),original)
+  for kind,original_items in (('services',SERVICES),('products',PRODUCTS),('articles',ARTICLES)):
+   current={entry['slug']:entry for entry in data.get(kind,[])}
+   for slug,old_title,old_description in original_items:
+    entry=current.get(slug)
+    if not entry:continue
+    original=original.replace('<h3>'+old_title+'</h3>','<h3>'+esc(entry.get('title',old_title))+'</h3>')
+    media=media_images(entry)
+    if media:
+     image_alt='Условная иллюстрация: '+old_title
+     original=re.sub(r'(<img\b[^>]*?src=")[^"]+("[^>]*?alt="'+re.escape(image_alt)+'")',lambda m:m.group(1)+esc(media[0])+m.group(2),original)
   published_products=[i for i in data['products'] if i.get('published',True)]
   gallery='<section class="section soft"><div class="container"><div class="section-head"><div><span class="kicker">КАТАЛОГ</span><h2 class="section-title">Изделия из пластика</h2></div><a href="/produkciya/">Весь каталог →</a></div>'+cards('products',published_products[:4])+'</div></section>'
   original=original.replace('</main>', gallery+'</main>')
