@@ -41,6 +41,31 @@ ARTICLES=[
  ('kak-podgotovit-tz-na-litye','Как подготовить техническое задание на литьё пластмасс','Параметры, которые стоит указать перед запросом производственного расчёта.'),
  ('litye-ili-ekstruziya','Литьё или экструзия: выбор технологии','Чем отличаются технологии изготовления изделий из пластика.')
 ]
+HOME_HEADINGS=[
+ ("services_heading","Услуги","От задачи до готового изделия",'<h2 class="section-title">От задачи до <em>готового изделия</em></h2>'),
+ ("products_heading","Продукция","Продукция для предприятий",'<h2 class="section-title">Продукция для <em>предприятий</em></h2>'),
+ ("process_heading","Производство","Понятный процесс работы с заказом",'<h2 class="section-title">Понятный процесс <em>работы с заказом</em></h2>'),
+ ("steps_heading","Как заказать","Четыре шага к обсуждению заказа",'<h2 class="section-title">Четыре шага к <em>обсуждению заказа</em></h2>'),
+ ("articles_heading","Статьи","Материалы о производстве",'<h2 class="section-title">Материалы о <em>производстве</em></h2>'),
+ ("cta_heading","Призыв к действию","Нужно изготовить пластиковое изделие?","<h2>Нужно изготовить пластиковое изделие?</h2>")
+]
+HOME_IMAGES=[
+ ("hero","Обложка главной","Концептуальная иллюстрация линии литья пластмасс"),
+ ("service_injection","Услуги: литьё","Условная иллюстрация: Литьё пластмасс под давлением"),
+ ("service_blueprint","Услуги: чертежи","Условная иллюстрация: Изделия по чертежам и образцам"),
+ ("service_extrusion","Услуги: экструзия","Условная иллюстрация: Экструзия полимерных изделий"),
+ ("service_household","Услуги: хозтовары","Условная иллюстрация: Хозяйственные изделия под заказ"),
+ ("product_hangers","Продукция: плечики","Условная иллюстрация: Вешалки-плечики"),
+ ("product_display","Продукция: торговые вешалки","Условная иллюстрация: Торговые вешалки"),
+ ("product_rings","Продукция: кольца","Условная иллюстрация: Кольца для штор"),
+ ("product_filters","Продукция: фильтры","Условная иллюстрация: Сито-фильтры"),
+ ("product_paving","Продукция: формы","Условная иллюстрация: Формы для брусчатки"),
+ ("product_boxes","Продукция: монтажные коробки","Условная иллюстрация: Электромонтажные коробки"),
+ ("product_tubes","Продукция: трубки","Условная иллюстрация: Электроизоляционные трубки"),
+ ("product_parts","Продукция: низковольтные детали","Условная иллюстрация: Детали низковольтного оборудования"),
+ ("production_drawing","Схема чертежа","Условная схема чертежа детали")
+]
+
 def seed():
  return {'settings':{'hero':'Пластиковые изделия для вашего бизнеса. От чертежа до партии.',
   'intro':'Контрактное литьё пластмасс, экструзия и серийная продукция. Обсудим ваш проект и условия сотрудничества.'},
@@ -88,9 +113,19 @@ def render(route):
   original=original.replace('href="assets/','href="/assets/').replace('src="assets/','src="/assets/')
   original=original.replace('href="index.html"','href="/"')
   original=re.sub(r'href="(uslugi|produkciya|proizvodstvo|stati|o-kompanii|kontakty|zapros-rascheta|politika-konfidencialnosti)/',r'href="/\1/',original)
-  hero_images=media_images(data['settings'])
-  if hero_images:
+  settings=data.get('settings',{})
+  for key,label,default,needle in HOME_HEADINGS:
+   wrap='<h2 class="section-title">' if key!='cta_heading' else '<h2>'
+   original=original.replace(needle,wrap+esc(settings.get(key,default))+'</h2>')
+  slots=settings.get('slots',{})
+  hero_images=media_images(settings)
+  if hero_images and not slots.get('hero'):
    original=original.replace('src="/assets/hero-factory.svg"', 'src="'+esc(hero_images[0])+'"')
+  for key,label,alt in HOME_IMAGES:
+   url=slots.get(key)
+   if not isinstance(url,str) or not IMAGE_PATH.fullmatch(url):continue
+   pattern=r'(<img\b[^>]*?src=")[^"]+("[^>]*?alt="'+re.escape(alt)+'")'
+   original=re.sub(pattern,lambda m:m.group(1)+esc(url)+m.group(2),original)
   published_products=[i for i in data['products'] if i.get('published',True)]
   gallery='<section class="section soft"><div class="container"><div class="section-head"><div><span class="kicker">КАТАЛОГ</span><h2 class="section-title">Изделия из пластика</h2></div><a href="/produkciya/">Весь каталог →</a></div>'+cards('products',published_products[:4])+'</div></section>'
   original=original.replace('</main>', gallery+'</main>')
