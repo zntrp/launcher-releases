@@ -6,8 +6,15 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from http.cookies import SimpleCookie
 from pathlib import Path
 import os, re, json, html, hmac, secrets, urllib.parse, time, threading
+from email.parser import BytesParser
+from email import policy
 ROOT=Path(__file__).resolve().parent
 DB=ROOT/'demo-content.json'
+MEDIA_DIR=ROOT/'media'
+MEDIA_DIR.mkdir(parents=True,exist_ok=True)
+IMAGE_PATH=re.compile(r'/media/[0-9a-f]{32}\.(?:png|jpg|webp)\Z')
+MAX_IMAGE_BYTES=3*1024*1024
+MAX_UPLOAD_REQUEST=4*1024*1024
 LOCK=threading.RLock()
 SESSIONS={}
 ATTEMPTS={}
@@ -59,8 +66,18 @@ def footer():
  return '<section class="cta-band"><div class="container cta-wrap"><div><h2>Нужно изготовить изделие из пластика?</h2><p>Расскажите о задаче и предполагаемом тираже.</p></div><a class="btn btn-primary" href="/zapros-rascheta/">Запросить расчёт →</a></div></section><footer class="footer"><div class="container"><div class="footer-cols"><div><h3 style="color:white">ПРАКТИК ПЛАСТ</h3><p>Промышленный B2B-сайт · Тестовая демонстрация</p></div><div><div class="footer-title">Разделы</div><a href="/uslugi/">Услуги</a><a href="/produkciya/">Продукция</a></div><div><div class="footer-title">Компания</div><a href="/proizvodstvo/">Производство</a><a href="/kontakty/">Контакты</a></div><div><div class="footer-title">Запрос расчёта</div><a href="/zapros-rascheta/">Отправить запрос</a></div></div></div></footer><script src="/assets/main.js" defer></script></body></html>'
 def page(title,body,desc=''):
  return head(title,desc)+header()+'<section class="inner-hero"><div class="container"><div class="eyebrow light">ПРАКТИК ПЛАСТ · ДЕМО</div><h1>'+esc(title)+'</h1><p>'+esc(desc)+'</p></div></section><main class="container page-content">'+body+'</main>'+footer()
+def media_images(item):
+ return [url for url in item.get('images',[]) if isinstance(url,str) and IMAGE_PATH.fullmatch(url)][:8]
+def photo_html(url,title,small=False):
+ return '<img loading="lazy" src="'+esc(url)+'" alt="'+esc(title)+'" style="display:block;width:100%;height:'+('170px' if small else '310px')+';object-fit:contain;background:#eef5f7;padding:10px;border-radius:5px">'
 def cards(kind,entries):
- return '<div class="listing">'+''.join('<a href="'+path_for(kind,item["slug"])+'"><span class="service-tag">'+esc(kind)+'</span><h3>'+esc(item["title"])+'</h3><p>'+esc(item.get("description",""))+'</p><span class="text-arrow">Подробнее →</span></a>' for item in entries if item.get('published',True))+'</div>'
+ out=[]
+ for item in entries:
+  if not item.get('published',True):continue
+  ims=media_images(item)
+  image=photo_html(ims[0],item['title'],True) if ims else '<div style="height:170px;background:#e8f2f5;display:flex;align-items:center;justify-content:center;color:#658b96;font-size:13px">Фотография товара / услуги</div>'
+  out.append('<a href="'+path_for(kind,item["slug"])+'">'+image+'<div style="padding:18px"><span class="service-tag">'+esc(kind)+'</span><h3>'+esc(item["title"])+'</h3><p>'+esc(item.get("description",""))+'</p><span class="text-arrow">Подробнее →</span></div></a>')
+ return '<div class="listing">'+''.join(out)+'</div>'
 def render(route):
  data=read_data()
  if route=='/' or route=='/index.html':
@@ -70,7 +87,13 @@ def render(route):
   original=original.replace('Контрактное литьё пластмасс, экструзия и серийная продукция. Обсудим ваш проект, технические требования и условия сотрудничества.',esc(data['settings']['intro']))
   original=original.replace('href="assets/','href="/assets/').replace('src="assets/','src="/assets/')
   original=original.replace('href="index.html"','href="/"')
-  original=re.sub(r'href="(uslugi|produkciya|proizvodstvo|stati|o-kompanii|kontakty|zapros-rascheta|politika-konfidencialnosti)/',r'href="/\1/',original)
+  original=re.sub(r'href="(uslugi|produkciya|proizvodstvo|stati|o-kompanii|kontakty|zapros-rascheta|politika-konfidencialnosti)/',r'href="/\\1/',original)
+  hero_images=media_images(data['settings'])
+  if hero_images:
+   original=original.replace('src="/assets/hero-factory.svg"', 'src="'+esc(hero_images[0])+'"')
+  published_products=[i for i in data['products'] if i.get('published',True)]
+  gallery='<section class="section soft"><div class="container"><div class="section-head"><div><span class="kicker">КАТАЛОГ</span><h2 class="section-title">Изделия из пластика</h2></div><a href="/produkciya/">Весь каталог →</a></div>'+cards('products',published_products[:4])+'</div></section>'
+  original=original.replace('</main>', gallery+'</main>')
   return original
  if route=='/health':return 'ok'
  cleaned=route.strip('/')
@@ -83,6 +106,10 @@ def render(route):
   obj=next((x for x in data[k] if x['slug']==parts[1] and x.get('published',True)),None)
   if obj:
    b='<div class="split"><div><p style="font-size:19px">'+esc(obj.get('description',''))+'</p><p>Для точного расчёта производства укажите материал, предполагаемую партию и технические требования.</p><a class="btn btn-primary" href="/zapros-rascheta/">Запросить расчёт ↗</a></div><div class="darkpanel"><h3>'+esc(obj['title'])+'</h3><p>Номенклатура, наличие и условия поставки уточняются у предприятия.</p></div></div>'
+   ims=media_images(obj)
+   if ims:
+    gallery='<section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:32px">'+''.join(photo_html(url,obj['title']) for url in ims)+'</section>'
+    b=gallery+b
    return page(obj['title'],b,obj.get('description',''))
  if cleaned=='proizvodstvo':
   return page('Производство','<p>Контрактное литьё пластмасс, экструзия, производство изделий по чертежам и образцам.</p><p>Технические характеристики оборудования и сведения о производстве требуют подтверждения заказчиком.</p>')
@@ -107,12 +134,64 @@ def session_from(h):
  if not item:return None
  s=SESSIONS.get(item.value)
  return s if s and s['expire']>time.time() else None
+def image_editor(item):
+ images=media_images(item)
+ imgs=json.dumps(images,ensure_ascii=False)
+ return ('<div class="panel" style="background:#f8fafb"><h3>Фотографии</h3>'
+  '<p class="muted">Можно загрузить до 8 JPG, PNG или WebP, не более 3 МБ каждое. Изображения появятся в каталоге после сохранения.</p>'
+  '<input id="images-value" type="hidden" name="images" value="'+esc(imgs)+'">'
+  '<div id="image-gallery-editor" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px"></div>'
+  '<label>Добавить фотографии<input id="add-images" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" multiple></label>'
+  '<p class="muted" id="upload-status">Фотографии временно сохраняются на тестовом сервере. При перезапуске Render они могут пропасть.</p></div>')
+IMAGE_EDITOR_JS=r"""<script>(function(){
+const file=document.getElementById('add-images'),hidden=document.getElementById('images-value'),gallery=document.getElementById('image-gallery-editor'),status=document.getElementById('upload-status'),submit=document.getElementById('save-record'),csrf=document.querySelector('input[name="csrf"]');
+if(!file||!hidden||!gallery||!csrf)return;
+let images=[];try{images=JSON.parse(hidden.value)||[]}catch(e){}
+function draw(){
+ gallery.replaceChildren();
+ images.forEach((url,index)=>{
+  const wrap=document.createElement('div');wrap.style.cssText='width:142px;background:#fff;padding:7px;border:1px solid #d9e5e9;border-radius:6px';
+  const img=document.createElement('img');img.src=url;img.alt='Фото '+(index+1);img.style.cssText='width:126px;height:100px;object-fit:contain;background:#eef5f7';
+  const btn=document.createElement('button');btn.type='button';btn.textContent='Удалить';btn.className='btn danger';btn.style.cssText='padding:5px 10px;font-size:12px;width:100%';
+  btn.addEventListener('click',()=>{images.splice(index,1);draw()});
+  wrap.append(img,btn);gallery.append(wrap);
+ });
+ hidden.value=JSON.stringify(images);
+}
+file.addEventListener('change',async()=>{
+ const files=Array.from(file.files||[]);
+ if(!files.length)return;
+ if(images.length+files.length>8){status.textContent='Максимум 8 изображений на запись';file.value='';return}
+ if(submit)submit.disabled=true;
+ try{
+  for(const f of files){
+   if(f.size>3*1024*1024){throw Error('Файл '+f.name+' больше 3 МБ')}
+   const body=new FormData();body.append('csrf',csrf.value);body.append('file',f);
+   status.textContent='Загружаю '+f.name+'...';
+   const res=await fetch('/admin/upload',{method:'POST',body,credentials:'same-origin'});
+   const json=await res.json().catch(()=>({error:'Ответ сервера не получен'}));
+   if(!res.ok||!json.url)throw Error(json.error||'HTTP '+res.status);
+   images.push(json.url);draw();
+  }
+  status.textContent='Загружено. Нажми «Сохранить», чтобы прикрепить фотографии к записи.';
+ }catch(err){status.textContent='Ошибка загрузки: '+err.message}
+ finally{file.value='';if(submit)submit.disabled=false}
+});
+draw();
+})()</script>"""
 def edit_form(k,data,slug=''):
  entries=data.get(k,[])
  item=next((x for x in entries if x['slug']==slug),None) if slug else None
- if item is None:item={'title':'','slug':'','description':'','published':True}
+ if item is None:item={'title':'','slug':'','description':'','published':True,'images':[]}
  opts={'services':'Услуги','products':'Каталог','articles':'Статьи','pages':'Страницы'}
- return '<div class="panel"><h2>'+('Редактировать' if slug else 'Добавить')+' · '+opts[k]+'</h2><form method="post" action="/admin/save"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="kind" value="'+k+'"><input type="hidden" name="original" value="'+esc(slug)+'"><label>Название<input required maxlength="150" name="title" value="'+esc(item['title'])+'"></label><label>Адрес (латиницей: a-z, цифры, дефис)<input required pattern="[a-z0-9-]+" maxlength="70" name="slug" value="'+esc(item['slug'])+'"></label><label>Описание / SEO description<textarea maxlength="4000" name="description">'+esc(item.get('description',''))+'</textarea></label><label><input style="display:inline;width:auto" type="checkbox" name="published" '+('checked' if item.get('published',True) else '')+'> Опубликовано</label><p><button class="btn">Сохранить</button></p></form></div>'
+ return ('<div class="panel"><h2>'+('Редактировать' if slug else 'Добавить')+' · '+opts[k]+'</h2>'
+  '<form method="post" action="/admin/save"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="kind" value="'+k+'"><input type="hidden" name="original" value="'+esc(slug)+'">'
+  '<label>Название<input required maxlength="150" name="title" value="'+esc(item['title'])+'"></label>'
+  '<label>Адрес (латиницей: a-z, цифры, дефис)<input required pattern="[a-z0-9-]+" maxlength="70" name="slug" value="'+esc(item['slug'])+'"></label>'
+  '<label>Описание / SEO description<textarea maxlength="4000" name="description">'+esc(item.get('description',''))+'</textarea></label>'
+  +image_editor(item)+
+  '<label><input style="display:inline;width:auto" type="checkbox" name="published" '+('checked' if item.get('published',True) else '')+'> Опубликовано</label>'
+  '<p><button id="save-record" class="btn">Сохранить</button></p></form></div>'+IMAGE_EDITOR_JS)
 class H(BaseHTTPRequestHandler):
  def log_message(self,*args):pass
  def send(self,status,body,ctype='text/html; charset=utf-8',cookie=None):
@@ -127,6 +206,12 @@ class H(BaseHTTPRequestHandler):
   self.end_headers()
  def do_GET(self):
   p=urllib.parse.unquote(urllib.parse.urlsplit(self.path).path)
+  if p.startswith('/media/'):
+   if not IMAGE_PATH.fullmatch(p):return self.send(404,'Not found','text/plain')
+   path=MEDIA_DIR/Path(p).name
+   if not path.is_file():return self.send(404,'File not found','text/plain')
+   ext=path.suffix.lower()
+   return self.send(200,path.read_bytes(),{'.jpg':'image/jpeg','.png':'image/png','.webp':'image/webp'}[ext])
   if p.startswith('/assets/'):
    suffix=Path(p).suffix.lower()
    if suffix=='.svg':
@@ -149,7 +234,7 @@ class H(BaseHTTPRequestHandler):
    b=admin_html()+nav
    if kind=='settings':
     item=data['settings']
-    b+='<div class="panel"><h2>Первый экран сайта</h2><form method="post" action="/admin/save"><input type="hidden" name="csrf" value="'+csrf+'"><input type="hidden" name="kind" value="settings"><label>Заголовок<input name="hero" value="'+esc(item['hero'])+'"></label><label>Описание<textarea name="intro">'+esc(item['intro'])+'</textarea></label><button class="btn">Сохранить</button></form></div>'
+    b+='<div class="panel"><h2>Первый экран сайта</h2><form method="post" action="/admin/save"><input type="hidden" name="csrf" value="'+csrf+'"><input type="hidden" name="kind" value="settings"><label>Заголовок<input name="hero" value="'+esc(item['hero'])+'"></label><label>Описание<textarea name="intro">'+esc(item['intro'])+'</textarea></label>'+image_editor(item)+'<button id="save-record" class="btn">Сохранить</button></form></div>'+IMAGE_EDITOR_JS
    else:
     b+='<div class="panel"><h2>Материалы: '+str(len(data[kind]))+'</h2>'
     for i in data[kind]:
@@ -166,8 +251,36 @@ class H(BaseHTTPRequestHandler):
  def do_POST(self):
   route=urllib.parse.urlsplit(self.path).path
   size=int(self.headers.get('Content-Length','0') or '0')
-  if size<1 or size>30000:return self.send(413,'Слишком большой запрос','text/plain')
-  if route not in ('/admin/login','/admin/save','/admin/logout'):return self.send(404,'Not found','text/plain')
+  if route not in ('/admin/login','/admin/save','/admin/logout','/admin/upload'):return self.send(404,'Not found','text/plain')
+  if size<1 or size>MAX_UPLOAD_REQUEST:return self.send(413,'Слишком большой запрос','text/plain')
+  if route=='/admin/upload':
+   sess=session_from(self)
+   if not sess:return self.send(403,json.dumps({'error':'Требуется вход в CMS'}),'application/json')
+   ctype=self.headers.get('Content-Type','')
+   if not ctype.lower().startswith('multipart/form-data;'):return self.send(415,json.dumps({'error':'Требуется multipart/form-data'}),'application/json')
+   raw=self.rfile.read(size)
+   try:
+    email_data=b'Content-Type: '+ctype.encode('ascii')+b'\\r\\nMIME-Version: 1.0\\r\\n\\r\\n'+raw
+    multi=BytesParser(policy=policy.default).parsebytes(email_data)
+    if not multi.is_multipart():raise ValueError('Некорректный multipart')
+    fields={p.get_param('name',header='content-disposition'):p for p in multi.iter_parts()}
+    csrf_part=fields.get('csrf')
+    supplied=csrf_part.get_payload(decode=True).decode('ascii') if csrf_part else ''
+    if not hmac.compare_digest(supplied,sess['csrf']):return self.send(403,json.dumps({'error':'Недействительный CSRF'}),'application/json')
+    file=fields.get('file')
+    if file is None or not file.get_filename():raise ValueError('Файл не выбран')
+    data=file.get_payload(decode=True)
+    if not data or len(data)>MAX_IMAGE_BYTES:raise ValueError('Максимальный размер файла — 3 МБ')
+    if data[:8]==bytes.fromhex('89504e470d0a1a0a') and b'IEND' in data[-24:]:ext='.png'
+    elif data[:3]==bytes.fromhex('ffd8ff') and data[-2:]==bytes.fromhex('ffd9'):ext='.jpg'
+    elif data[:4]==b'RIFF' and data[8:12]==b'WEBP':ext='.webp'
+    else:raise ValueError('Разрешены только PNG, JPG и WebP')
+    filename=secrets.token_hex(16)+ext
+    with (MEDIA_DIR/filename).open('xb') as out:out.write(data)
+    return self.send(201,json.dumps({'url':'/media/'+filename}),'application/json')
+   except (ValueError,UnicodeError,TypeError) as error:
+    return self.send(400,json.dumps({'error':str(error)},ensure_ascii=False),'application/json')
+  if size>30000:return self.send(413,'Слишком большой запрос','text/plain')
   form=urllib.parse.parse_qs(self.rfile.read(size).decode('utf-8','replace'))
   get=lambda k,default='':form.get(k,[default])[0]
   if route=='/admin/login':
@@ -187,14 +300,20 @@ class H(BaseHTTPRequestHandler):
   kind=get('kind')
   if kind not in ('services','products','articles','pages','settings'):return self.send(400,'Invalid kind','text/plain')
   data=read_data()
+  try:
+   image_list=json.loads(get('images','[]'))
+   if not isinstance(image_list,list) or len(image_list)>8 or any(not isinstance(u,str) or not IMAGE_PATH.fullmatch(u) for u in image_list):raise ValueError()
+  except (ValueError,TypeError):
+   return self.send(400,'Недопустимые ссылки на изображения','text/plain')
   if kind=='settings':
    data['settings']['hero']=get('hero')[:180]
    data['settings']['intro']=get('intro')[:600]
+   data['settings']['images']=image_list
   else:
    slug=get('slug');old=get('original')
    if not re.fullmatch('[a-z0-9][a-z0-9-]{0,68}',slug):return self.send(400,'URL: только латинские буквы и цифры','text/plain')
    if old and slug!=old:return self.send(400,'Изменять URL существующей страницы нельзя','text/plain')
-   new={'slug':slug,'title':get('title')[:150],'description':get('description')[:4000],'published':bool(get('published'))}
+   new={'slug':slug,'title':get('title')[:150],'description':get('description')[:4000],'published':bool(get('published')),'images':image_list}
    if not new['title']:return self.send(400,'Title required','text/plain')
    records=data[kind];existing=next((x for x in records if x['slug']==slug),None)
    if existing:records[records.index(existing)]=new
