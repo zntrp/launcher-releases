@@ -158,7 +158,30 @@ def render(route):
  if cleaned=='politika-konfidencialnosti':
   return page('Обработка персональных данных','<p>Это демонстрационная версия. До коммерческого запуска необходимо утвердить политику обработки персональных данных.</p>')
  return None
-CSSADMIN="""<style>body{background:#f4f6f8;font:15px/1.5 Arial,sans-serif;color:#142a3b;margin:0}.wrap{max-width:1030px;margin:35px auto;padding:0 20px}h1{font-size:28px;margin:12px 0}.nav{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}.nav a{padding:9px 14px;background:white;border:1px solid #d6e1e8;border-radius:5px;color:#075b6d;text-decoration:none}.panel{background:white;padding:25px;border:1px solid #dce5eb;border-radius:9px;margin-bottom:16px}.warn{background:#fff7e4;border:1px solid #e6bc70;padding:13px 17px;border-radius:5px;color:#795c21}input,textarea,select{display:block;width:100%;padding:11px;border:1px solid #cbdce4;border-radius:5px;margin:6px 0 16px;box-sizing:border-box;font:inherit}textarea{min-height:145px}.btn{background:#0d7e87;color:white;padding:11px 18px;border:none;border-radius:5px;cursor:pointer;font:inherit}.danger{background:#b84848}.listitem{display:flex;justify-content:space-between;gap:15px;padding:12px;border-bottom:1px solid #edf0f3}.muted{color:#758996;font-size:13px}a{color:#037e90}label{font-weight:650}.tabs{display:flex;gap:16px;flex-wrap:wrap}.small{font-size:12px}</style>"""
+def home_image_fields(settings):
+ slots=settings.get('slots',{})
+ out='<div class="panel"><h2>Все изображения главной</h2><p class="muted">Заменяй фотографии каждого блока прямо здесь. После загрузки нажми «Сохранить изменения».</p>'
+ for key,label,alt in HOME_IMAGES:
+  url=slots.get(key,'')
+  if not isinstance(url,str) or not IMAGE_PATH.fullmatch(url):url=''
+  out+='<div class="media-slot"><div style="flex:1;min-width:240px"><b>'+esc(label)+'</b><p class="muted">'+esc(alt)+'</p><input readonly name="slot_'+esc(key)+'" data-media-url value="'+esc(url)+'" placeholder="Пока используется стандартное изображение"></div><div><img data-media-preview style="width:120px;height:80px;object-fit:contain;background:#e9f2f6" '+('src="'+esc(url)+'"' if url else '')+' alt=""><input type="file" data-media-input accept="image/png,image/jpeg,image/webp" style="width:200px"><button type="button" data-media-remove class="btn danger" style="padding:5px 12px;font-size:12px">Убрать</button></div></div>'
+ return out+'</div>'
+HOME_UPLOAD_JS=r"""<script>(function(){
+const csrf=document.querySelector('input[name="csrf"]'),info=document.getElementById('home-upload-status'),save=document.getElementById('home-save');
+document.querySelectorAll('.media-slot').forEach(row=>{
+ const file=row.querySelector('[data-media-input]'),url=row.querySelector('[data-media-url]'),img=row.querySelector('[data-media-preview]'),remove=row.querySelector('[data-media-remove]');
+ if(!file||!url)return;
+ file.addEventListener('change',async()=>{const f=file.files&&file.files[0];if(!f)return;if(save)save.disabled=true;
+ try{if(f.size>3145728)throw Error('Максимум 3 МБ');const fd=new FormData();fd.append('csrf',csrf.value);fd.append('file',f);
+ const res=await fetch('/admin/upload',{method:'POST',body:fd,credentials:'same-origin'});const data=await res.json();if(!res.ok||!data.url)throw Error(data.error||'Ошибка загрузки');
+ url.value=data.url;img.src=data.url;if(info)info.textContent='Фотография загружена. Сохрани изменения.';}
+ catch(err){if(info)info.textContent=err.message}finally{file.value='';if(save)save.disabled=false;}});
+ remove.addEventListener('click',()=>{url.value='';img.removeAttribute('src')});
+});
+})()</script>"""
+
+CSSADMIN="""<style>body{background:#f4f6f8;font:15px/1.5 Arial,sans-serif;color:#142a3b;margin:0}.wrap{max-width:1030px;margin:35px auto;padding:0 20px}h1{font-size:28px;margin:12px 0}.nav{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}.nav a{padding:9px 14px;background:white;border:1px solid #d6e1e8;border-radius:5px;color:#075b6d;text-decoration:none}.panel{background:white;padding:25px;border:1px solid #dce5eb;border-radius:9px;margin-bottom:16px}.warn{background:#fff7e4;border:1px solid #e6bc70;padding:13px 17px;border-radius:5px;color:#795c21}input,textarea,select{display:block;width:100%;padding:11px;border:1px solid #cbdce4;border-radius:5px;margin:6px 0 16px;box-sizing:border-box;font:inherit}textarea{min-height:145px}.btn{background:#0d7e87;color:white;padding:11px 18px;border:none;border-radius:5px;cursor:pointer;font:inherit}.danger{background:#b84848}.listitem{display:flex;justify-content:space-between;gap:15px;padding:12px;border-bottom:1px solid #edf0f3}.muted{color:#758996;font-size:13px}a{color:#037e90}label{font-weight:650}.tabs{display:flex;gap:16px;flex-wrap:wrap}.small{font-size:12px}.media-slot{display:flex;gap:15px;align-items:center;border:1px solid #e0e8ed;border-radius:8px;padding:12px;margin:9px 0;flex-wrap:wrap}.media-slot input[type=file]{font-size:12px;margin:7px 0}.media-slot .btn{padding:5px 9px}
+</style>"""
 def admin_html(auth=True):
  return '<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">'+CSSADMIN+'<div class="wrap"><p><a href="/">← Открыть сайт</a></p><h1>Практик Пласт · CMS (тест)</h1><div class="warn"><b>Демо-режим:</b> на бесплатном хостинге изменения могут исчезнуть при перезапуске или новой публикации. Не используйте здесь реальные персональные данные или коммерчески важные материалы.</div>'
 def session_from(h):
@@ -269,7 +292,12 @@ class H(BaseHTTPRequestHandler):
    b=admin_html()+nav
    if kind=='settings':
     item=data['settings']
-    b+='<div class="panel"><h2>Первый экран сайта</h2><form method="post" action="/admin/save"><input type="hidden" name="csrf" value="'+csrf+'"><input type="hidden" name="kind" value="settings"><label>Заголовок<input name="hero" value="'+esc(item['hero'])+'"></label><label>Описание<textarea name="intro">'+esc(item['intro'])+'</textarea></label>'+image_editor(item)+'<button id="save-record" class="btn">Сохранить</button></form></div>'+IMAGE_EDITOR_JS
+    b+='<form method="post" action="/admin/save"><input type="hidden" name="csrf" value="'+csrf+'"><input type="hidden" name="kind" value="settings">'
+    b+='<div class="panel"><h2>Первый экран</h2><label>Главный заголовок H1<input maxlength="180" name="hero" value="'+esc(item.get('hero',''))+'"></label><label>Подзаголовок<textarea maxlength="600" name="intro">'+esc(item.get('intro',''))+'</textarea></label></div>'
+    b+='<div class="panel"><h2>Заголовки всех секций</h2><p class="muted">Изменения сразу отражаются на публичной странице после сохранения.</p>'
+    for key,label,default,_ in HOME_HEADINGS:b+='<label>'+esc(label)+'<input name="'+key+'" maxlength="160" value="'+esc(item.get(key,default))+'"></label>'
+    b+='</div>'+home_image_fields(item)
+    b+='<div class="panel"><p class="muted" id="home-upload-status">Изображения: JPG, PNG, WebP до 3 МБ.</p><button id="home-save" class="btn">Сохранить изменения</button> <a href="/" target="_blank" style="margin-left:12px">Посмотреть главную ↗</a></div></form>'+HOME_UPLOAD_JS
    else:
     b+='<div class="panel"><h2>Материалы: '+str(len(data[kind]))+'</h2>'
     for i in data[kind]:
@@ -341,9 +369,18 @@ class H(BaseHTTPRequestHandler):
   except (ValueError,TypeError):
    return self.send(400,'Недопустимые ссылки на изображения','text/plain')
   if kind=='settings':
-   data['settings']['hero']=get('hero')[:180]
-   data['settings']['intro']=get('intro')[:600]
-   data['settings']['images']=image_list
+   current=data['settings']
+   current['hero']=get('hero')[:180]
+   current['intro']=get('intro')[:600]
+   for key,_,default,_ in HOME_HEADINGS:
+    current[key]=get(key,default)[:160]
+   slots=current.get('slots',{})
+   for key,_,_ in HOME_IMAGES:
+    url=get('slot_'+key)
+    if url and not IMAGE_PATH.fullmatch(url):return self.send(400,'Некорректный путь к изображению','text/plain')
+    slots[key]=url
+   current['slots']=slots
+   current['images']=image_list
   else:
    slug=get('slug');old=get('original')
    if not re.fullmatch('[a-z0-9][a-z0-9-]{0,68}',slug):return self.send(400,'URL: только латинские буквы и цифры','text/plain')
