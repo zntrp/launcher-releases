@@ -9,7 +9,9 @@
     "start": "next start -H 0.0.0.0 -p ${PORT:-3000}",
     "generate:importmap": "payload generate:importmap",
     "generate:types": "payload generate:types",
-    "seed": "tsx scripts/seed.ts"
+    "seed": "tsx scripts/seed.ts",
+    "db:init:preview": "PREVIEW_AUTO_SEED=false NODE_ENV=production payload migrate:create initial --skip-empty && PREVIEW_AUTO_SEED=false NODE_ENV=production payload migrate",
+    "payload": "payload"
   },
   "dependencies": {
     "@payloadcms/db-postgres": "3.93.0",
