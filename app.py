@@ -89,8 +89,8 @@ def header():
  return '<div class="thinbar"><div class="container">ПРОИЗВОДСТВО ИЗДЕЛИЙ ИЗ ПОЛИМЕРОВ · ЛЕНИНГРАДСКАЯ ОБЛАСТЬ <span class="demo-stamp">ДЕМО</span></div></div><header class="tophead"><div class="container headerinner"><a class="brand" href="/"><span class="brand-icon"></span><span class="brand-type"><strong>ПРАКТИК ПЛАСТ</strong><span>ПРОИЗВОДСТВО ИЗДЕЛИЙ ИЗ ПОЛИМЕРОВ</span></span></a><nav id="main-menu" class="menu">'+''.join('<a href="'+url+'">'+name+'</a>' for url,name in NAV[1:])+'</nav><div class="header-actions"><a class="btn btn-primary" href="/zapros-rascheta/">Запросить расчёт ↗</a></div><button class="navtoggle" aria-label="Меню" aria-controls="main-menu">☰</button></div></header>'
 def footer():
  return '<section class="cta-band"><div class="container cta-wrap"><div><h2>Нужно изготовить изделие из пластика?</h2><p>Расскажите о задаче и предполагаемом тираже.</p></div><a class="btn btn-primary" href="/zapros-rascheta/">Запросить расчёт →</a></div></section><footer class="footer"><div class="container"><div class="footer-cols"><div><h3 style="color:white">ПРАКТИК ПЛАСТ</h3><p>Промышленный B2B-сайт · Тестовая демонстрация</p></div><div><div class="footer-title">Разделы</div><a href="/uslugi/">Услуги</a><a href="/produkciya/">Продукция</a></div><div><div class="footer-title">Компания</div><a href="/proizvodstvo/">Производство</a><a href="/kontakty/">Контакты</a></div><div><div class="footer-title">Запрос расчёта</div><a href="/zapros-rascheta/">Отправить запрос</a></div></div></div></footer><script src="/assets/main.js" defer></script></body></html>'
-def page(title,body,desc=''):
- return head(title,desc)+header()+'<section class="inner-hero"><div class="container"><div class="eyebrow light">ПРАКТИК ПЛАСТ · ДЕМО</div><h1>'+esc(title)+'</h1><p>'+esc(desc)+'</p></div></section><main class="container page-content">'+body+'</main>'+footer()
+def page(title,body,desc='',seo_title=None,seo_desc=None):
+ return head(seo_title or title,seo_desc or desc)+header()+'<section class="inner-hero"><div class="container"><div class="eyebrow light">ПРАКТИК ПЛАСТ · ДЕМО</div><h1>'+esc(title)+'</h1><p>'+esc(desc)+'</p></div></section><main class="container page-content">'+body+'</main>'+footer()
 def media_images(item):
  return [url for url in item.get('images',[]) if isinstance(url,str) and IMAGE_PATH.fullmatch(url)][:8]
 def photo_html(url,title,small=False):
@@ -103,6 +103,45 @@ def cards(kind,entries):
   image=photo_html(ims[0],item['title'],True) if ims else '<div style="height:170px;background:#e8f2f5;display:flex;align-items:center;justify-content:center;color:#658b96;font-size:13px">Фотография товара / услуги</div>'
   out.append('<a href="'+path_for(kind,item["slug"])+'">'+image+'<div style="padding:18px"><span class="service-tag">'+esc(kind)+'</span><h3>'+esc(item["title"])+'</h3><p>'+esc(item.get("description",""))+'</p><span class="text-arrow">Подробнее →</span></div></a>')
  return '<div class="listing">'+''.join(out)+'</div>'
+def block_render(items):
+ if not isinstance(items,list):return ''
+ out=[]
+ for item in items[:30]:
+  if not isinstance(item,dict):continue
+  kind=item.get('type')
+  title=esc(item.get('title','')[:160])
+  text=esc(item.get('text','')[:6000]).replace('\n','<br>')
+  img=item.get('image','')
+  if kind=='heading':
+   out.append('<section style="padding:16px 0"><h2>'+title+'</h2></section>')
+  elif kind=='text':
+   out.append('<section class="section" style="padding:20px 0"><div style="max-width:870px"><h2>'+title+'</h2><p>'+text+'</p></div></section>')
+  elif kind=='image' and isinstance(img,str) and IMAGE_PATH.fullmatch(img):
+   out.append('<figure style="margin:35px 0"><img loading="lazy" src="'+esc(img)+'" alt="'+title+'" style="max-width:100%;max-height:600px;object-fit:contain;border-radius:8px"><figcaption>'+title+'</figcaption></figure>')
+  elif kind=='cta':
+   url=item.get('url','/zapros-rascheta/')
+   if not isinstance(url,str) or not (url.startswith('/') and not url.startswith('//')):url='/zapros-rascheta/'
+   out.append('<div class="darkpanel" style="margin:35px 0"><h2>'+title+'</h2><p>'+text+'</p><a class="btn btn-primary" href="'+esc(url)+'">'+esc(item.get('button','Запросить расчёт'))+'</a></div>')
+  elif kind=='faq':
+   content='<h2>'+title+'</h2>'
+   for line in str(item.get('text','')).splitlines()[:15]:
+    if '|' not in line:continue
+    q,a=line.split('|',1)
+    content+='<details style="padding:15px;border-bottom:1px solid #d7e5eb"><summary><b>'+esc(q)+'</b></summary><p>'+esc(a)+'</p></details>'
+   out.append('<section style="margin:35px 0">'+content+'</section>')
+ return ''.join(out)
+def checked_blocks(value):
+ if not isinstance(value,list) or len(value)>30:raise ValueError('Максимум 30 блоков')
+ allowed={'heading','text','image','cta','faq'}
+ result=[]
+ for item in value:
+  if not isinstance(item,dict) or item.get('type') not in allowed:raise ValueError('Недопустимый тип блока')
+  entry={k:str(item.get(k,''))[:({'text':6000}.get(k,200))] for k in ('title','text','image','url','button')}
+  entry['type']=item['type']
+  if entry['image'] and not IMAGE_PATH.fullmatch(entry['image']):raise ValueError('Недопустимый путь к изображению')
+  result.append(entry)
+ return result
+
 def render(route):
  data=read_data()
  if route=='/' or route=='/index.html':
@@ -145,7 +184,8 @@ def render(route):
    if ims:
     gallery='<section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:32px">'+''.join(photo_html(url,obj['title']) for url in ims)+'</section>'
     b=gallery+b
-   return page(obj['title'],b,obj.get('description',''))
+   b+=block_render(obj.get('blocks',[]))
+   return page(obj['title'],b,obj.get('description',''),obj.get('seo_title'),obj.get('seo_description'))
  if cleaned=='proizvodstvo':
   return page('Производство','<p>Контрактное литьё пластмасс, экструзия, производство изделий по чертежам и образцам.</p><p>Технические характеристики оборудования и сведения о производстве требуют подтверждения заказчиком.</p>')
  if cleaned=='o-kompanii':
