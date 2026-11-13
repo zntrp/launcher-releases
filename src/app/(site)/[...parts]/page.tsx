@@ -32,7 +32,7 @@ export default async function Route({params}:Props){
   const doc=await details(parts) as Record<string,any>|null
   const fb=fixture[section]?.find(i=>i.slug===slug)
   if(!doc&&!fb)notFound()
-  const record=doc||fb!
+  const record=(doc||fb!) as Record<string,any>
   return <PageShell title={record.title} subtitle={record.summary||record.excerpt||record.description||'Изготовление пластиковых изделий для B2B-заказчиков'}>
     <section className="section"><div className="container split"><div><p className="section-desc">{record.summary||record.excerpt||record.description}</p><p>Для коммерческого расчёта подготовьте чертёж, характеристики материала и требуемый тираж.</p><a className="btn btn-primary" href="/zapros-rascheta/">Запросить расчёт →</a></div>{toMediaURL(record.cover)&&<img src={toMediaURL(record.cover)} alt={record.title} className="cms-detail-cover"/>}</div></section>
     {Array.isArray(record.layout)&&<Blocks layout={record.layout}/>}
