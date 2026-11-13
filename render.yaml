@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: praktik-plast-payload-stage-2026
+    runtime: node
+    repo: https://github.com/zntrp/launcher-releases
+    branch: praktik-payload-next
+    plan: free
+    region: frankfurt
+    buildCommand: npm install --no-audit --no-fund && npm run build
+    startCommand: npm run start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 24.22.3
+      - key: NODE_OPTIONS
+        value: "--max-old-space-size=768"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: praktik-plast-payload-preview-db
+          property: connectionString
+      - key: PAYLOAD_SECRET
+        generateValue: true
+      - key: PREVIEW_SECRET
+        generateValue: true
+      - key: PREVIEW_SCHEMA_PUSH
+        value: "true"
+      - key: PREVIEW_AUTO_SEED
+        value: "true"
