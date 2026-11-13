@@ -220,7 +220,7 @@ document.querySelectorAll('.media-slot').forEach(row=>{
 });
 })()</script>"""
 
-CSSADMIN="""<style>body{background:#f4f6f8;font:15px/1.5 Arial,sans-serif;color:#142a3b;margin:0}.wrap{max-width:1030px;margin:35px auto;padding:0 20px}h1{font-size:28px;margin:12px 0}.nav{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}.nav a{padding:9px 14px;background:white;border:1px solid #d6e1e8;border-radius:5px;color:#075b6d;text-decoration:none}.panel{background:white;padding:25px;border:1px solid #dce5eb;border-radius:9px;margin-bottom:16px}.warn{background:#fff7e4;border:1px solid #e6bc70;padding:13px 17px;border-radius:5px;color:#795c21}input,textarea,select{display:block;width:100%;padding:11px;border:1px solid #cbdce4;border-radius:5px;margin:6px 0 16px;box-sizing:border-box;font:inherit}textarea{min-height:145px}.btn{background:#0d7e87;color:white;padding:11px 18px;border:none;border-radius:5px;cursor:pointer;font:inherit}.danger{background:#b84848}.listitem{display:flex;justify-content:space-between;gap:15px;padding:12px;border-bottom:1px solid #edf0f3}.muted{color:#758996;font-size:13px}a{color:#037e90}label{font-weight:650}.tabs{display:flex;gap:16px;flex-wrap:wrap}.small{font-size:12px}.media-slot{display:flex;gap:15px;align-items:center;border:1px solid #e0e8ed;border-radius:8px;padding:12px;margin:9px 0;flex-wrap:wrap}.media-slot input[type=file]{font-size:12px;margin:7px 0}.media-slot .btn{padding:5px 9px}
+CSSADMIN="""<style>body{background:#f4f6f8;font:15px/1.5 Arial,sans-serif;color:#142a3b;margin:0}.wrap{max-width:1030px;margin:35px auto;padding:0 20px}h1{font-size:28px;margin:12px 0}.nav{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}.nav a{padding:9px 14px;background:white;border:1px solid #d6e1e8;border-radius:5px;color:#075b6d;text-decoration:none}.panel{background:white;padding:25px;border:1px solid #dce5eb;border-radius:9px;margin-bottom:16px}.warn{background:#fff7e4;border:1px solid #e6bc70;padding:13px 17px;border-radius:5px;color:#795c21}input,textarea,select{display:block;width:100%;padding:11px;border:1px solid #cbdce4;border-radius:5px;margin:6px 0 16px;box-sizing:border-box;font:inherit}textarea{min-height:145px}.btn{background:#0d7e87;color:white;padding:11px 18px;border:none;border-radius:5px;cursor:pointer;font:inherit}.danger{background:#b84848}.listitem{display:flex;justify-content:space-between;gap:15px;padding:12px;border-bottom:1px solid #edf0f3}.muted{color:#758996;font-size:13px}a{color:#037e90}label{font-weight:650}.tabs{display:flex;gap:16px;flex-wrap:wrap}.small{font-size:12px}.block-card{padding:17px;border:1px solid #dee8ed;background:#f9fbfc;border-radius:8px;margin:12px 0}.block-top{display:flex;align-items:center;gap:10px;margin-bottom:15px}.block-top b{flex:1}.block-btn{border:1px solid #d7e4e9;background:white;border-radius:5px;padding:5px 9px;cursor:pointer}.block-buttons{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.block-buttons .btn{font-size:12px;padding:8px 10px}.media-slot{display:flex;gap:15px;align-items:center;border:1px solid #e0e8ed;border-radius:8px;padding:12px;margin:9px 0;flex-wrap:wrap}.media-slot input[type=file]{font-size:12px;margin:7px 0}.media-slot .btn{padding:5px 9px}
 </style>"""
 def admin_html(auth=True):
  return '<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">'+CSSADMIN+'<div class="wrap"><p><a href="/">← Открыть сайт</a></p><h1>Практик Пласт · CMS (тест)</h1><div class="warn"><b>Демо-режим:</b> на бесплатном хостинге изменения могут исчезнуть при перезапуске или новой публикации. Не используйте здесь реальные персональные данные или коммерчески важные материалы.</div>'
@@ -277,6 +277,63 @@ file.addEventListener('change',async()=>{
 });
 draw();
 })()</script>"""
+def blocks_form(item):
+ raw=esc(json.dumps(item.get('blocks',[]),ensure_ascii=False))
+ return ('<div class="panel"><h2>Конструктор страницы</h2>'
+  '<p class="muted">Добавляйте заголовки, текст, изображения, FAQ и призывы к действию. Меняйте порядок стрелками. Результат появится на опубликованной странице.</p>'
+  '<input type="hidden" name="blocks" id="blocks-state" value="'+raw+'">'
+  '<div id="blocks-editor"></div><div class="block-buttons">'
+  '<button type="button" class="btn" data-new-block="heading">+ Заголовок</button> '
+  '<button type="button" class="btn" data-new-block="text">+ Текст</button> '
+  '<button type="button" class="btn" data-new-block="image">+ Фото</button> '
+  '<button type="button" class="btn" data-new-block="faq">+ Вопросы / FAQ</button> '
+  '<button type="button" class="btn" data-new-block="cta">+ Кнопка / CTA</button></div></div>')
+BLOCK_EDITOR_JS=r"""<script>(function(){
+const field=document.getElementById('blocks-state'),root=document.getElementById('blocks-editor'),csrf=document.querySelector('input[name="csrf"]'),save=document.getElementById('save-record');
+if(!field||!root)return;
+let blocks=[];try{blocks=JSON.parse(field.value)||[]}catch(e){}
+const types={heading:'Заголовок H2',text:'Текстовый блок',image:'Изображение',faq:'Вопросы и ответы',cta:'Призыв к действию'};
+function sync(){field.value=JSON.stringify(blocks)}
+function elt(tag,props={}){const e=document.createElement(tag);Object.entries(props).forEach(([k,v])=>{if(k==='text')e.textContent=v;else if(k==='className')e.className=v;else e[k]=v});return e}
+function addField(card,b,name,label,multi=false){
+const lab=elt('label',{text:label});const inp=elt(multi?'textarea':'input');inp.value=b[name]||'';inp.placeholder=label;inp.maxLength=name==='text'?6000:200;
+inp.addEventListener('input',()=>{b[name]=inp.value;sync()});lab.appendChild(inp);card.append(lab);return inp;
+}
+function draw(){
+root.replaceChildren();sync();
+blocks.forEach((b,i)=>{
+const card=elt('div',{className:'block-card'}),top=elt('div',{className:'block-top'}),h=elt('b',{text:(i+1)+'. '+(types[b.type]||b.type)});
+top.append(h);
+[['↑',()=>{if(i){[blocks[i-1],blocks[i]]=[blocks[i],blocks[i-1]];draw()}}],
+ ['↓',()=>{if(i+1<blocks.length){[blocks[i+1],blocks[i]]=[blocks[i],blocks[i+1]];draw()}}],
+ ['✕',()=>{blocks.splice(i,1);draw()}]].forEach(([name,cb])=>{const btn=elt('button',{type:'button',text:name,className:'block-btn'});btn.addEventListener('click',cb);top.append(btn)});
+card.append(top);
+addField(card,b,'title','Заголовок блока');
+if(['text','faq','cta'].includes(b.type))addField(card,b,'text',b.type==='faq'?'По одной паре на строку: Вопрос | Ответ':'Текст',true);
+if(b.type==='cta'){addField(card,b,'button','Текст кнопки');addField(card,b,'url','Ссылка кнопки (например /zapros-rascheta/)')}
+if(b.type==='image'){
+const prev=elt('img');prev.style.cssText='display:block;max-width:250px;max-height:180px;object-fit:contain;margin:10px 0;background:#e7f0f4';
+if(b.image)prev.src=b.image;card.append(prev);
+const input=elt('input',{type:'file'});input.accept='image/jpeg,image/png,image/webp';
+const status=elt('p',{className:'muted',text:'Фотография до 3 МБ'});
+input.addEventListener('change',async()=>{
+const f=input.files&&input.files[0];if(!f)return;if(save)save.disabled=true;
+try{if(f.size>3145728)throw Error('Файл слишком большой');const fd=new FormData();fd.append('csrf',csrf.value);fd.append('file',f);
+const res=await fetch('/admin/upload',{method:'POST',body:fd});const obj=await res.json();if(!res.ok||!obj.url)throw Error(obj.error||'Не удалось загрузить');
+b.image=obj.url;prev.src=obj.url;status.textContent='Загружено. Нажми «Сохранить».';sync();
+}catch(e){status.textContent=e.message}finally{input.value='';if(save)save.disabled=false}});
+card.append(input,status);
+}
+root.append(card);
+});
+}
+document.querySelectorAll('[data-new-block]').forEach(button=>button.addEventListener('click',()=>{
+if(blocks.length>=30){alert('Максимум 30 блоков на страницу');return}
+const type=button.dataset.newBlock;blocks.push({type,title:'',text:'',image:'',url:'/zapros-rascheta/',button:'Запросить расчёт'});draw();
+}));
+draw();
+})()</script>"""
+
 def edit_form(k,data,slug=''):
  entries=data.get(k,[])
  item=next((x for x in entries if x['slug']==slug),None) if slug else None
@@ -286,10 +343,12 @@ def edit_form(k,data,slug=''):
   '<form method="post" action="/admin/save"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="kind" value="'+k+'"><input type="hidden" name="original" value="'+esc(slug)+'">'
   '<label>Название<input required maxlength="150" name="title" value="'+esc(item['title'])+'"></label>'
   '<label>Адрес (латиницей: a-z, цифры, дефис)<input required pattern="[a-z0-9-]+" maxlength="70" name="slug" value="'+esc(item['slug'])+'"></label>'
-  '<label>Описание / SEO description<textarea maxlength="4000" name="description">'+esc(item.get('description',''))+'</textarea></label>'
-  +image_editor(item)+
+  '<label>Краткое описание<textarea maxlength="4000" name="description">'+esc(item.get('description',''))+'</textarea></label>'
+  '<label>SEO Title<input maxlength="180" name="seo_title" value="'+esc(item.get('seo_title',''))+'" placeholder="Если пусто — название страницы"></label>'
+  '<label>SEO Description<textarea maxlength="450" name="seo_description" placeholder="Если пусто — краткое описание">'+esc(item.get('seo_description',''))+'</textarea></label>'
+  +image_editor(item)+blocks_form(item)+
   '<label><input style="display:inline;width:auto" type="checkbox" name="published" '+('checked' if item.get('published',True) else '')+'> Опубликовано</label>'
-  '<p><button id="save-record" class="btn">Сохранить</button></p></form></div>'+IMAGE_EDITOR_JS)
+  '<p><button id="save-record" class="btn">Сохранить</button> '+('<a href="'+path_for(k,slug)+'" target="_blank">Открыть страницу ↗</a>' if slug else '')+'</p></form></div>'+IMAGE_EDITOR_JS+BLOCK_EDITOR_JS)
 class H(BaseHTTPRequestHandler):
  def log_message(self,*args):pass
  def send(self,status,body,ctype='text/html; charset=utf-8',cookie=None):
@@ -383,7 +442,7 @@ class H(BaseHTTPRequestHandler):
     return self.send(201,json.dumps({'url':'/media/'+filename}),'application/json')
    except (ValueError,UnicodeError,TypeError) as error:
     return self.send(400,json.dumps({'error':str(error)},ensure_ascii=False),'application/json')
-  if size>30000:return self.send(413,'Слишком большой запрос','text/plain')
+  if size>220000:return self.send(413,'Слишком большой запрос','text/plain')
   form=urllib.parse.parse_qs(self.rfile.read(size).decode('utf-8','replace'))
   get=lambda k,default='':form.get(k,[default])[0]
   if route=='/admin/login':
@@ -425,7 +484,9 @@ class H(BaseHTTPRequestHandler):
    slug=get('slug');old=get('original')
    if not re.fullmatch('[a-z0-9][a-z0-9-]{0,68}',slug):return self.send(400,'URL: только латинские буквы и цифры','text/plain')
    if old and slug!=old:return self.send(400,'Изменять URL существующей страницы нельзя','text/plain')
-   new={'slug':slug,'title':get('title')[:150],'description':get('description')[:4000],'published':bool(get('published')),'images':image_list}
+   try:blocks=checked_blocks(json.loads(get('blocks','[]')))
+   except (ValueError,TypeError):return self.send(400,'Некорректные блоки страницы','text/plain')
+   new={'slug':slug,'title':get('title')[:150],'description':get('description')[:4000],'seo_title':get('seo_title')[:180],'seo_description':get('seo_description')[:450],'blocks':blocks,'published':bool(get('published')),'images':image_list}
    if not new['title']:return self.send(400,'Title required','text/plain')
    records=data[kind];existing=next((x for x in records if x['slug']==slug),None)
    if existing:records[records.index(existing)]=new
