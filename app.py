@@ -87,7 +87,7 @@ def render(route):
   original=original.replace('Контрактное литьё пластмасс, экструзия и серийная продукция. Обсудим ваш проект, технические требования и условия сотрудничества.',esc(data['settings']['intro']))
   original=original.replace('href="assets/','href="/assets/').replace('src="assets/','src="/assets/')
   original=original.replace('href="index.html"','href="/"')
-  original=re.sub(r'href="(uslugi|produkciya|proizvodstvo|stati|o-kompanii|kontakty|zapros-rascheta|politika-konfidencialnosti)/',r'href="/\\1/',original)
+  original=re.sub(r'href="(uslugi|produkciya|proizvodstvo|stati|o-kompanii|kontakty|zapros-rascheta|politika-konfidencialnosti)/',r'href="/\1/',original)
   hero_images=media_images(data['settings'])
   if hero_images:
    original=original.replace('src="/assets/hero-factory.svg"', 'src="'+esc(hero_images[0])+'"')
@@ -260,7 +260,7 @@ class H(BaseHTTPRequestHandler):
    if not ctype.lower().startswith('multipart/form-data;'):return self.send(415,json.dumps({'error':'Требуется multipart/form-data'}),'application/json')
    raw=self.rfile.read(size)
    try:
-    email_data=b'Content-Type: '+ctype.encode('ascii')+b'\\r\\nMIME-Version: 1.0\\r\\n\\r\\n'+raw
+    email_data=b'Content-Type: '+ctype.encode('ascii')+b'\r\nMIME-Version: 1.0\r\n\r\n'+raw
     multi=BytesParser(policy=policy.default).parsebytes(email_data)
     if not multi.is_multipart():raise ValueError('Некорректный multipart')
     fields={p.get_param('name',header='content-disposition'):p for p in multi.iter_parts()}
